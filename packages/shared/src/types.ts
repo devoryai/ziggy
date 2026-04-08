@@ -29,6 +29,9 @@ export type RiskLevel = "low" | "medium" | "high" | "critical";
 export type SensitivityLevel = "basic";
 export type WorkerType = "local" | "external";
 export type WorkerRole = "planner" | "writer" | "builder";
+export type ExecutionMode = WorkerType | "blocked";
+export type ApprovalRequirement = "none" | "confirmation" | "explicit";
+export type CapabilityScope = "read-only" | "scoped-change";
 
 // A capability definition loaded from capabilities.yaml
 export interface CapabilityDefinition {
@@ -90,6 +93,26 @@ export interface GovernanceTaskTemplate {
   risk_level: RiskLevel;
   sensitivity_level: SensitivityLevel;
   allowed_capabilities: CapabilityId[];
+}
+
+export interface DoctrineTrustSignal {
+  label: "Risk" | "Approval" | "Execution mode" | "Scope" | "Reversible";
+  value: string;
+  tone: "neutral" | "caution" | "positive";
+}
+
+export interface DoctrineEvaluation {
+  risk_level: RiskLevel;
+  approval_required: boolean;
+  approval_requirement: ApprovalRequirement;
+  execution_mode: ExecutionMode;
+  scope_ok: boolean;
+  scope: CapabilityScope;
+  reversible: boolean;
+  reversible_preferred: boolean;
+  blocked: boolean;
+  blocked_reason?: string;
+  reasoning: string[];
 }
 
 // The contract submitted for a task
@@ -206,6 +229,8 @@ export interface RunRecord {
   allowed_capabilities: CapabilityId[];
   risk_level: RiskLevel;
   sensitivity_level: SensitivityLevel;
+  execution_mode: ExecutionMode;
+  doctrine_evaluation?: DoctrineEvaluation;
   state: RunState;
   plan?: Plan;
   result_summary?: string;

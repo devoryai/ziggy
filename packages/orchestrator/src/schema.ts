@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS runs (
   allowed_capabilities TEXT NOT NULL DEFAULT '[]',  -- JSON array
   risk_level TEXT NOT NULL DEFAULT 'medium',
   sensitivity_level TEXT NOT NULL DEFAULT 'basic',
+  execution_mode TEXT NOT NULL DEFAULT 'local',
+  doctrine_evaluation TEXT,
   state       TEXT NOT NULL DEFAULT 'queued',
   plan        TEXT,             -- JSON Plan object
   result_summary TEXT,
@@ -90,6 +92,8 @@ export function initSchema(): void {
     "ALTER TABLE runs ADD COLUMN allowed_capabilities TEXT NOT NULL DEFAULT '[]'",
     "ALTER TABLE runs ADD COLUMN risk_level TEXT NOT NULL DEFAULT 'medium'",
     "ALTER TABLE runs ADD COLUMN sensitivity_level TEXT NOT NULL DEFAULT 'basic'",
+    "ALTER TABLE runs ADD COLUMN execution_mode TEXT NOT NULL DEFAULT 'local'",
+    "ALTER TABLE runs ADD COLUMN doctrine_evaluation TEXT",
   ];
   for (const statement of runColumnMigrations) {
     try {

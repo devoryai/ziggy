@@ -189,13 +189,40 @@ export function checkToolScope(
 
   // Path check
   if (cap.paths && cap.paths.length > 0) {
-    const path = args.path as string | undefined;
-    if (!path) {
-      violations.push(`Tool '${capabilityId}' requires a 'path' argument.`);
-    } else if (!isPathAllowed(capabilityId, path)) {
-      violations.push(
-        `Path '${path}' is not in the allowed list for '${capabilityId}'.`
-      );
+    if (capabilityId === "files.apply_organize") {
+      const sourceDirectory = args.source_directory as string | undefined;
+      if (!sourceDirectory) {
+        violations.push(`Tool '${capabilityId}' requires a 'source_directory' argument.`);
+      } else if (!isPathAllowed(capabilityId, sourceDirectory)) {
+        violations.push(
+          `Path '${sourceDirectory}' is not in the allowed list for '${capabilityId}'.`
+        );
+      }
+
+      const proposals = Array.isArray(args.proposals) ? args.proposals : [];
+      for (const proposal of proposals) {
+        const from = typeof proposal?.from === "string" ? proposal.from : undefined;
+        const to = typeof proposal?.to === "string" ? proposal.to : undefined;
+        if (!from || !to) {
+          violations.push(`Tool '${capabilityId}' proposal entries must include 'from' and 'to'.`);
+          continue;
+        }
+        if (!isPathAllowed(capabilityId, from)) {
+          violations.push(`Path '${from}' is not in the allowed list for '${capabilityId}'.`);
+        }
+        if (!isPathAllowed(capabilityId, to)) {
+          violations.push(`Path '${to}' is not in the allowed list for '${capabilityId}'.`);
+        }
+      }
+    } else {
+      const path = args.path as string | undefined;
+      if (!path) {
+        violations.push(`Tool '${capabilityId}' requires a 'path' argument.`);
+      } else if (!isPathAllowed(capabilityId, path)) {
+        violations.push(
+          `Path '${path}' is not in the allowed list for '${capabilityId}'.`
+        );
+      }
     }
   }
 

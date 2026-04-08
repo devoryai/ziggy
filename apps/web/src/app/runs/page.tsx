@@ -58,6 +58,14 @@ export default function RunsPage() {
 
 function RunRow({ run }: { run: RunRecord }) {
   const stateColor = STATE_COLORS[run.state] ?? "var(--text-muted)";
+  const approvalLabel =
+    run.doctrine_evaluation?.approval_requirement === "none"
+      ? "approval:auto"
+      : "approval:required";
+  const modeLabel = `mode:${run.execution_mode}`;
+  const scopeLabel = run.doctrine_evaluation
+    ? `scope:${run.doctrine_evaluation.scope === "read-only" ? "read-only" : "scoped"}`
+    : null;
 
   return (
     <a
@@ -103,6 +111,9 @@ function RunRow({ run }: { run: RunRecord }) {
       )}
       <div style={{ marginTop: "8px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
         <CapBadge cap={`risk:${run.risk_level}`} />
+        <CapBadge cap={approvalLabel} />
+        <CapBadge cap={modeLabel} />
+        {scopeLabel && <CapBadge cap={scopeLabel} />}
         {run.capabilities.map((cap) => (
           <CapBadge key={cap} cap={cap} />
         ))}

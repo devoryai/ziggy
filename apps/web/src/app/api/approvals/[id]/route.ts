@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ApprovalDecisionSchema } from "@ziggy/shared";
 import {
   getApproval,
+  getRun,
   decideApproval,
   executeApprovedStep,
   updateRunResultState,
@@ -75,6 +76,14 @@ export async function POST(
       );
       return NextResponse.json({ approval: updated, executionResult });
     } catch (err) {
+      const run = getRun(approval.run_id);
+      if (run?.state === "blocked") {
+        return NextResponse.json({
+          approval: updated,
+          run,
+          error: run.error ?? "Task blocked for safety",
+        });
+      }
       return NextResponse.json(
         { approval: updated, error: `Execution failed: ${String(err)}` },
         { status: 500 }

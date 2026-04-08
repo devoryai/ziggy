@@ -5,3 +5,4 @@ export * from "./approvals";
 export * from "./tool-logger";
 export * from "./executor";
 export * from "./runtime-hooks";
+export * from "./doctrine";

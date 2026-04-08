@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import type {
+  DoctrineTrustSignal,
   RunRecord,
   ApprovalRecord,
   ToolCallLog,
@@ -87,6 +88,7 @@ export default function RunDetailPage({ params }: { params: { id: string } }) {
 
   const { run, approvals, toolCalls } = detail;
   const pendingApprovals = approvals.filter((a) => a.status === "pending");
+  const trustSignals = buildTrustSignals(run);
   const latestFileProposal = [...toolCalls]
     .reverse()
     .find((call) => call.tool === "files.propose_organize" && call.result.success)?.result
@@ -106,6 +108,34 @@ export default function RunDetailPage({ params }: { params: { id: string } }) {
       <h1 style={{ fontSize: "28px", fontWeight: 700, marginBottom: "6px", letterSpacing: "-0.03em" }}>{run.task_title}</h1>
       <p style={{ color: "var(--text-muted)", marginBottom: "28px", fontSize: "14px", maxWidth: "700px" }}>{run.task_goal}</p>
 
+      {run.doctrine_evaluation && (
+        <Section title="Trust signals">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "10px", marginBottom: "14px" }}>
+            {trustSignals.map((signal) => (
+              <TrustSignalCard key={signal.label} signal={signal} />
+            ))}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "13px", color: "var(--text-muted)" }}>
+            {run.doctrine_evaluation.blocked && (
+              <div style={{ color: "var(--red)" }}>
+                Blocked for safety. {run.doctrine_evaluation.blocked_reason}
+              </div>
+            )}
+            {!run.doctrine_evaluation.blocked && run.doctrine_evaluation.execution_mode === "local" && (
+              <div>Using local execution.</div>
+            )}
+            {!run.doctrine_evaluation.blocked && run.doctrine_evaluation.approval_required && (
+              <div>Needs your approval before visible changes.</div>
+            )}
+            <div>
+              {run.doctrine_evaluation.reversible
+                ? "This action is reversible or inspectable first."
+                : "This action may be harder to reverse, so Ziggy keeps review in the loop."}
+            </div>
+          </div>
+        </Section>
+      )}
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "28px" }}>
         <InfoCard label="Status">
           <StateTag state={run.state} />
@@ -115,6 +145,9 @@ export default function RunDetailPage({ params }: { params: { id: string } }) {
         </InfoCard>
         <InfoCard label="Risk level">
           <span style={{ fontSize: "12px", textTransform: "capitalize" }}>{run.risk_level}</span>
+        </InfoCard>
+        <InfoCard label="Execution mode">
+          <span style={{ fontSize: "12px", textTransform: "capitalize" }}>{run.execution_mode}</span>
         </InfoCard>
         <InfoCard label="Started">
           <span style={{ fontSize: "12px" }}>{new Date(run.created_at).toLocaleString()}</span>
@@ -230,8 +263,86 @@ export default function RunDetailPage({ params }: { params: { id: string } }) {
           <div style={{ color: "var(--red)", fontSize: "13px" }}>{run.error}</div>
         </Section>
       )}
+
+      {run.doctrine_evaluation && run.doctrine_evaluation.reasoning.length > 0 && (
+        <Section title="Why Ziggy chose this path">
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            {run.doctrine_evaluation.reasoning.map((reason, index) => (
+              <div key={`${index}-${reason}`} style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                {reason}
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
     </div>
   );
+}
+
+function TrustSignalCard({ signal }: { signal: DoctrineTrustSignal }) {
+  const toneColor =
+    signal.tone === "caution"
+      ? "var(--yellow)"
+      : signal.tone === "positive"
+        ? "var(--green)"
+        : "var(--accent)";
+
+  return (
+    <div
+      style={{
+        padding: "12px 14px",
+        borderRadius: "12px",
+        border: "1px solid var(--border)",
+        background: "var(--bg-card)",
+      }}
+    >
+      <div style={{ fontSize: "11px", color: "var(--text-dim)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+        {signal.label}
+      </div>
+      <div style={{ fontSize: "14px", color: toneColor, fontWeight: 600 }}>{signal.value}</div>
+    </div>
+  );
+}
+
+function buildTrustSignals(run: RunRecord): DoctrineTrustSignal[] {
+  if (!run.doctrine_evaluation) return [];
+
+  return [
+    {
+      label: "Risk",
+      value: capitalize(run.doctrine_evaluation.risk_level),
+      tone: ["high", "critical"].includes(run.doctrine_evaluation.risk_level) ? "caution" : "neutral",
+    },
+    {
+      label: "Approval",
+      value:
+        run.doctrine_evaluation.approval_requirement === "none"
+          ? "Auto"
+          : run.doctrine_evaluation.approval_requirement === "explicit"
+            ? "Required"
+            : "Needs your approval",
+      tone: run.doctrine_evaluation.approval_required ? "caution" : "positive",
+    },
+    {
+      label: "Execution mode",
+      value: capitalize(run.doctrine_evaluation.execution_mode),
+      tone: run.doctrine_evaluation.execution_mode === "blocked" ? "caution" : "neutral",
+    },
+    {
+      label: "Scope",
+      value: run.doctrine_evaluation.scope === "read-only" ? "Read-only" : "Scoped changes",
+      tone: run.doctrine_evaluation.scope === "read-only" ? "positive" : "neutral",
+    },
+    {
+      label: "Reversible",
+      value: run.doctrine_evaluation.reversible ? "Yes" : "No",
+      tone: run.doctrine_evaluation.reversible ? "positive" : "caution",
+    },
+  ];
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function ApprovalCard({

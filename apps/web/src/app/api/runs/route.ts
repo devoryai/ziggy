@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { CreateTaskRequestSchema } from "@ziggy/shared";
 import {
+  getRun,
   listRuns,
   submitTask,
   planRun,
@@ -47,6 +48,17 @@ export async function POST(req: NextRequest) {
   const governanceCapabilities = loadGovernanceCapabilities();
   const governanceContexts = loadGovernanceContexts();
   const allowedCapabilities = parsed.data.allowed_capabilities ?? parsed.data.capabilities;
+  const disallowedRequestedCapabilities = allowedCapabilities.filter(
+    (capability) => !parsed.data.capabilities.includes(capability)
+  );
+  if (disallowedRequestedCapabilities.length > 0) {
+    return NextResponse.json(
+      {
+        error: `allowed_capabilities must be a subset of requested capabilities. Unexpected: ${disallowedRequestedCapabilities.join(", ")}`,
+      },
+      { status: 400 }
+    );
+  }
   const capabilityRiskRank = { low: 0, medium: 1, high: 2, critical: 3 } as const;
   const inferredRisk = parsed.data.capabilities.reduce<keyof typeof capabilityRiskRank>(
     (highest, capabilityId) => {
@@ -72,6 +84,14 @@ export async function POST(req: NextRequest) {
 
   // Submit task and immediately plan + execute read-only steps
   const runId = await submitTask(task);
+  const createdRun = getRun(runId);
+  if (createdRun?.state === "blocked") {
+    return NextResponse.json({
+      runId,
+      error: createdRun.error ?? "Task blocked for safety",
+      run: createdRun,
+    });
+  }
 
   try {
     const plan = await planRun(runId);
@@ -83,6 +103,14 @@ export async function POST(req: NextRequest) {
       execution,
     });
   } catch (err) {
+    const latestRun = getRun(runId);
+    if (latestRun?.state === "blocked") {
+      return NextResponse.json({
+        runId,
+        error: latestRun.error ?? "Task blocked for safety",
+        run: latestRun,
+      });
+    }
     return NextResponse.json(
       { runId, error: `Execution error: ${String(err)}` },
       { status: 500 }

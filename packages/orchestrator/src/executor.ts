@@ -14,11 +14,17 @@ import type {
   Plan,
   PlannedToolCall,
   CapabilityId,
+  DoctrineEvaluation,
   FileMoveProposal,
   FileOrganizationProposal,
   FileOrganizationApplyResult,
 } from "@ziggy/shared";
-import { loadCapabilities, loadContexts, getCapability } from "@ziggy/policy";
+import {
+  loadCapabilities,
+  loadContexts,
+  getCapability,
+  checkToolScope,
+} from "@ziggy/policy";
 import { generatePlan, generateMockPlan, checkOllamaHealth } from "@ziggy/models";
 import { executeTool, setToolLogCallback } from "@ziggy/tools";
 import type { ToolExecutionLog } from "@ziggy/tools";
@@ -29,9 +35,15 @@ import {
   updateRunState,
   updateRunPlan,
   updateRunResult,
+  updateRunDoctrineEvaluation,
 } from "./runs";
 import { createApproval, getApprovalForStep } from "./approvals";
 import { logToolCall, listToolCallsByRun } from "./tool-logger";
+import {
+  determineStepApprovalRequirement,
+  evaluateTaskAgainstDoctrine,
+  validatePlanAgainstDoctrine,
+} from "./doctrine";
 
 // Wire tool logging into the orchestrator
 setToolLogCallback(async (entry: ToolExecutionLog) => {
@@ -69,10 +81,107 @@ export function writeApprovalDecisionArtifact(
   });
 }
 
+function writeDoctrineArtifact(runId: string, evaluation: DoctrineEvaluation): void {
+  writeJsonArtifact(runId, "doctrine.json", evaluation);
+}
+
+function blockRunForDoctrine(runId: string, evaluation: DoctrineEvaluation): never {
+  updateRunDoctrineEvaluation(runId, evaluation);
+  writeDoctrineArtifact(runId, evaluation);
+  updateRunState(runId, "blocked", evaluation.blocked_reason ?? "Task blocked for safety");
+  throw new Error(evaluation.blocked_reason ?? "Task blocked for safety");
+}
+
+function ensureStepWithinDoctrine(
+  run: NonNullable<ReturnType<typeof getRun>>,
+  step: PlannedToolCall,
+  stepIndex: number
+): { requiresApproval: boolean; approvalReason?: string } {
+  if (!run.allowed_capabilities.includes(step.tool as CapabilityId)) {
+    const evaluation: DoctrineEvaluation = {
+      ...(run.doctrine_evaluation ??
+        evaluateTaskAgainstDoctrine({
+          allowed_capabilities: run.allowed_capabilities,
+          risk_level: run.risk_level,
+          sensitivity_level: run.sensitivity_level,
+        })),
+      approval_required: true,
+      approval_requirement: "explicit",
+      execution_mode: "blocked",
+      scope_ok: false,
+      blocked: true,
+      blocked_reason: `Task blocked: planner requested unapproved capability ${step.tool}`,
+      reasoning: [
+        ...(run.doctrine_evaluation?.reasoning ?? []),
+        `Task blocked: planner requested unapproved capability ${step.tool}`,
+      ],
+    };
+    blockRunForDoctrine(run.id, evaluation);
+  }
+
+  const cap = getCapability(step.tool);
+  if (!cap) {
+    const evaluation: DoctrineEvaluation = {
+      ...(run.doctrine_evaluation ??
+        evaluateTaskAgainstDoctrine({
+          allowed_capabilities: run.allowed_capabilities,
+          risk_level: run.risk_level,
+          sensitivity_level: run.sensitivity_level,
+        })),
+      approval_required: true,
+      approval_requirement: "explicit",
+      execution_mode: "blocked",
+      scope_ok: false,
+      blocked: true,
+      blocked_reason: `Task blocked: missing runtime capability definition for '${step.tool}'`,
+      reasoning: [
+        ...(run.doctrine_evaluation?.reasoning ?? []),
+        `Task blocked: missing runtime capability definition for '${step.tool}'`,
+      ],
+    };
+    blockRunForDoctrine(run.id, evaluation);
+  }
+
+  const scopeViolations = checkToolScope(step.tool as CapabilityId, step.args);
+  if (scopeViolations.length > 0) {
+    const evaluation: DoctrineEvaluation = {
+      ...(run.doctrine_evaluation ??
+        evaluateTaskAgainstDoctrine({
+          allowed_capabilities: run.allowed_capabilities,
+          risk_level: run.risk_level,
+          sensitivity_level: run.sensitivity_level,
+        })),
+      approval_required: true,
+      approval_requirement: "explicit",
+      execution_mode: "blocked",
+      scope_ok: false,
+      blocked: true,
+      blocked_reason: `Task blocked: step ${stepIndex + 1} exceeded approved scope`,
+      reasoning: [
+        ...(run.doctrine_evaluation?.reasoning ?? []),
+        `Task blocked: step ${stepIndex + 1} exceeded approved scope`,
+        ...scopeViolations,
+      ],
+    };
+    blockRunForDoctrine(run.id, evaluation);
+  }
+
+  const approval = determineStepApprovalRequirement(run, step);
+  return {
+    requiresApproval: approval.approval_required,
+    approvalReason:
+      approval.approval_required
+        ? `${step.reason} ${approval.reasons.join(" ")}`
+        : undefined,
+  };
+}
+
 // ---- Task submission ----
 
 export async function submitTask(task: TaskContract): Promise<string> {
-  const run = createRun(task);
+  const doctrineEvaluation = evaluateTaskAgainstDoctrine(task);
+  const run = createRun(task, doctrineEvaluation);
+  writeDoctrineArtifact(run.id, doctrineEvaluation);
   return run.id;
 }
 
@@ -81,12 +190,15 @@ export async function submitTask(task: TaskContract): Promise<string> {
 export async function planRun(runId: string): Promise<Plan> {
   const run = getRun(runId);
   if (!run) throw new Error(`Run '${runId}' not found`);
+  if (run.doctrine_evaluation?.blocked) {
+    blockRunForDoctrine(runId, run.doctrine_evaluation);
+  }
 
   updateRunState(runId, "planning");
 
   const allCapabilities = loadCapabilities();
   const allowedCapabilities = allCapabilities.filter((c) =>
-    (run.capabilities as CapabilityId[]).includes(c.id as CapabilityId)
+    (run.allowed_capabilities as CapabilityId[]).includes(c.id as CapabilityId)
   );
 
   const allContexts = loadContexts();
@@ -100,7 +212,7 @@ export async function planRun(runId: string): Promise<Plan> {
       id: run.task_id,
       title: run.task_title,
       goal: run.task_goal,
-      capabilities: run.capabilities,
+      capabilities: run.allowed_capabilities,
       allowed_capabilities: run.allowed_capabilities,
       context: run.context,
       risk_level: run.risk_level,
@@ -113,7 +225,7 @@ export async function planRun(runId: string): Promise<Plan> {
   };
 
   let plan: Plan;
-  const isFileOrganizationRun = run.capabilities.some(
+  const isFileOrganizationRun = run.allowed_capabilities.some(
     (capability) =>
       capability === "files.propose_organize" || capability === "files.apply_organize"
   );
@@ -130,6 +242,13 @@ export async function planRun(runId: string): Promise<Plan> {
       console.warn(`[orchestrator] Ollama unavailable (${String(err)}), using mock plan`);
       plan = generateMockPlan(plannerInput);
     }
+  }
+
+  const doctrineEvaluation = validatePlanAgainstDoctrine(run, plan);
+  updateRunDoctrineEvaluation(runId, doctrineEvaluation);
+  writeDoctrineArtifact(runId, doctrineEvaluation);
+  if (doctrineEvaluation.blocked) {
+    blockRunForDoctrine(runId, doctrineEvaluation);
   }
 
   updateRunPlan(runId, plan);
@@ -151,6 +270,17 @@ export async function executeReadOnlySteps(runId: string): Promise<{
 }> {
   const run = getRun(runId);
   if (!run || !run.plan) throw new Error(`Run '${runId}' has no plan`);
+  if (run.doctrine_evaluation?.blocked || run.execution_mode === "blocked") {
+    blockRunForDoctrine(
+      runId,
+      run.doctrine_evaluation ??
+        evaluateTaskAgainstDoctrine({
+          allowed_capabilities: run.allowed_capabilities,
+          risk_level: run.risk_level,
+          sensitivity_level: run.sensitivity_level,
+        })
+    );
+  }
 
   updateRunState(runId, "executing");
 
@@ -159,22 +289,16 @@ export async function executeReadOnlySteps(runId: string): Promise<{
 
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
-    const cap = getCapability(step.tool);
+    const doctrineStep = ensureStepWithinDoctrine(run, step, i);
 
-    if (!cap) {
-      updateRunState(runId, "failed", `Unknown capability '${step.tool}'`);
-      throw new Error(`Unknown capability '${step.tool}'`);
-    }
-
-    if (cap.side_effect || cap.approval_required) {
+    if (doctrineStep.requiresApproval) {
       updateRunPlan(runId, run.plan);
-      // Create an approval record and pause
       createApproval({
         runId,
         stepIndex: i,
         tool: step.tool as CapabilityId,
         args: step.args,
-        reason: step.reason,
+        reason: doctrineStep.approvalReason ?? step.reason,
       });
       updateRunState(runId, "awaiting_approval");
       return { completed: false, pendingApprovalStepIndex: i, results };
@@ -221,6 +345,17 @@ export async function executeApprovedStep(
 ): Promise<{ completed: boolean; results: Array<{ stepIndex: number; result: unknown }> }> {
   const run = getRun(runId);
   if (!run || !run.plan) throw new Error(`Run '${runId}' has no plan`);
+  if (run.doctrine_evaluation?.blocked || run.execution_mode === "blocked") {
+    blockRunForDoctrine(
+      runId,
+      run.doctrine_evaluation ??
+        evaluateTaskAgainstDoctrine({
+          allowed_capabilities: run.allowed_capabilities,
+          risk_level: run.risk_level,
+          sensitivity_level: run.sensitivity_level,
+        })
+    );
+  }
 
   const approval = getApprovalForStep(runId, stepIndex);
   if (!approval || approval.status !== "approved") {
@@ -230,6 +365,7 @@ export async function executeApprovedStep(
   updateRunState(runId, "executing");
 
   const step = run.plan.steps[stepIndex];
+  ensureStepWithinDoctrine(run, step, stepIndex);
   const result = await executeTool(step.tool as CapabilityId, step.args, runId, stepIndex);
   const priorResults = listToolCallsByRun(runId)
     .filter((call) => call.step_index < stepIndex)
@@ -251,21 +387,16 @@ export async function executeApprovedStep(
   // Continue with remaining steps
   for (let i = stepIndex + 1; i < run.plan.steps.length; i++) {
     const nextStep = run.plan.steps[i];
-    const cap = getCapability(nextStep.tool);
+    const doctrineStep = ensureStepWithinDoctrine(run, nextStep, i);
 
-    if (!cap) {
-      updateRunState(runId, "failed", `Unknown capability '${nextStep.tool}'`);
-      break;
-    }
-
-    if (cap.side_effect || cap.approval_required) {
+    if (doctrineStep.requiresApproval) {
       updateRunPlan(runId, run.plan);
       createApproval({
         runId,
         stepIndex: i,
         tool: nextStep.tool as CapabilityId,
         args: nextStep.args,
-        reason: nextStep.reason,
+        reason: doctrineStep.approvalReason ?? nextStep.reason,
       });
       updateRunState(runId, "awaiting_approval");
       return { completed: false, results };

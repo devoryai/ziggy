@@ -3,11 +3,19 @@
  */
 import { randomUUID } from "crypto";
 import { getDb } from "./db";
-import type { RunRecord, RunState, TaskContract, Plan, CapabilityId, ContextId } from "@ziggy/shared";
+import type {
+  DoctrineEvaluation,
+  RunRecord,
+  RunState,
+  TaskContract,
+  Plan,
+  CapabilityId,
+  ContextId,
+} from "@ziggy/shared";
 
 // ---- Create ----
 
-export function createRun(task: TaskContract): RunRecord {
+export function createRun(task: TaskContract, doctrineEvaluation?: DoctrineEvaluation): RunRecord {
   const db = getDb();
   const now = new Date().toISOString();
   const id = randomUUID();
@@ -22,7 +30,10 @@ export function createRun(task: TaskContract): RunRecord {
     allowed_capabilities: task.allowed_capabilities,
     risk_level: task.risk_level,
     sensitivity_level: task.sensitivity_level,
-    state: "queued",
+    execution_mode: doctrineEvaluation?.execution_mode ?? "local",
+    doctrine_evaluation: doctrineEvaluation,
+    state: doctrineEvaluation?.blocked ? "blocked" : "queued",
+    error: doctrineEvaluation?.blocked_reason,
     created_at: now,
     updated_at: now,
   };
@@ -30,9 +41,10 @@ export function createRun(task: TaskContract): RunRecord {
   db.prepare(`
     INSERT INTO runs (
       id, task_id, task_title, task_goal, context, capabilities,
-      allowed_capabilities, risk_level, sensitivity_level, state, created_at, updated_at
+      allowed_capabilities, risk_level, sensitivity_level, execution_mode, doctrine_evaluation,
+      state, error, created_at, updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     run.id,
     run.task_id,
@@ -43,7 +55,10 @@ export function createRun(task: TaskContract): RunRecord {
     JSON.stringify(run.allowed_capabilities),
     run.risk_level,
     run.sensitivity_level,
+    run.execution_mode,
+    run.doctrine_evaluation ? JSON.stringify(run.doctrine_evaluation) : null,
     run.state,
+    run.error ?? null,
     run.created_at,
     run.updated_at
   );
@@ -86,6 +101,18 @@ export function updateRunPlan(id: string, plan: Plan): void {
   `).run(JSON.stringify(plan), new Date().toISOString(), id);
 }
 
+export function updateRunDoctrineEvaluation(id: string, evaluation: DoctrineEvaluation): void {
+  const db = getDb();
+  db.prepare(`
+    UPDATE runs SET doctrine_evaluation = ?, execution_mode = ?, updated_at = ? WHERE id = ?
+  `).run(
+    JSON.stringify(evaluation),
+    evaluation.execution_mode,
+    new Date().toISOString(),
+    id
+  );
+}
+
 export function updateRunResult(id: string, summary: string): void {
   updateRunResultState(id, "completed", summary);
 }
@@ -112,6 +139,10 @@ function rowToRun(row: Record<string, unknown>): RunRecord {
       : (JSON.parse(row.capabilities as string) as CapabilityId[]),
     risk_level: (row.risk_level as RunRecord["risk_level"]) ?? "medium",
     sensitivity_level: (row.sensitivity_level as RunRecord["sensitivity_level"]) ?? "basic",
+    execution_mode: (row.execution_mode as RunRecord["execution_mode"]) ?? "local",
+    doctrine_evaluation: row.doctrine_evaluation
+      ? (JSON.parse(row.doctrine_evaluation as string) as DoctrineEvaluation)
+      : undefined,
     state: row.state as RunState,
     plan: row.plan ? JSON.parse(row.plan as string) as Plan : undefined,
     result_summary: row.result_summary as string | undefined,
