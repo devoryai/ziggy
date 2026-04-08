@@ -1,0 +1,25 @@
+contexts:
+  - id: work_email
+    preferred_worker_role: writer
+    default_risk_level: medium
+    notes: Clear drafting support with review before anything leaves the system.
+
+  - id: file_cleanup
+    preferred_worker_role: builder
+    default_risk_level: high
+    notes: Local file work stays inside approved roots and remains fully inspectable.
+
+  - id: calendar_prep
+    preferred_worker_role: planner
+    default_risk_level: low
+    notes: Read-only preparation context for meetings and agenda work.
+
+  - id: casual
+    preferred_worker_role: writer
+    default_risk_level: low
+    notes: Lightweight support for everyday personal tasks.
+
+  - id: teaching
+    preferred_worker_role: writer
+    default_risk_level: low
+    notes: Explanatory work should stay transparent and easy to inspect.

@@ -1,0 +1,20 @@
+approval_rules:
+  - id: medium_requires_review_for_side_effects
+    applies_to:
+      risk_level: medium
+    outcome: Require approval before any side effect or external handoff.
+
+  - id: high_always_requires_local_review
+    applies_to:
+      risk_level: high
+    outcome: Require approval, keep execution local, and record detailed artifacts.
+
+  - id: file_apply_requires_explicit_approval
+    applies_to:
+      capability: files.apply_organize
+    outcome: Present a clear approval card and apply only the reviewed proposal.
+
+  - id: critical_reserved_for_future_expansion
+    applies_to:
+      risk_level: critical
+    outcome: Reserved for narrowly scoped future capabilities with additional controls.

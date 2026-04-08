@@ -1,0 +1,24 @@
+{
+  "name": "ziggy",
+  "version": "1.0.0",
+  "description": "Ziggy — local-first governed personal AI assistant",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm -r build",
+    "dev:web": "pnpm --filter web dev",
+    "db:init": "pnpm --filter @ziggy/orchestrator db:init",
+    "db:seed": "pnpm --filter @ziggy/orchestrator db:seed"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.32.1",
+  "devDependencies": {
+    "tsx": "^4.21.0",
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "@types/node": "^22.19.17"
+  }
+}

@@ -1,0 +1,38 @@
+risk_levels:
+  - id: low
+    description: Read-only or reversible work with limited sensitivity.
+    approval_requirement: Review is optional unless a capability-specific rule says otherwise.
+    allowed_side_effects: []
+    allowed_worker_types:
+      - local
+    logging_level: standard
+
+  - id: medium
+    description: Useful day-to-day actions that may draft, stage, or prepare changes for review.
+    approval_requirement: Human review before any user-visible side effect.
+    allowed_side_effects:
+      - draft_creation
+      - proposal_generation
+    allowed_worker_types:
+      - local
+      - external
+    logging_level: detailed
+
+  - id: high
+    description: Actions that modify local state or operate on sensitive personal or work material.
+    approval_requirement: Explicit approval plus detailed run logging before execution.
+    allowed_side_effects:
+      - local_file_changes
+      - saved_drafts
+    allowed_worker_types:
+      - local
+    logging_level: full
+
+  - id: critical
+    description: Security-sensitive or irreversible work that should remain tightly constrained.
+    approval_requirement: Named approval and narrow scoping before execution.
+    allowed_side_effects:
+      - none_by_default
+    allowed_worker_types:
+      - local
+    logging_level: full

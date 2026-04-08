@@ -1,0 +1,28 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3737",
+    "build": "next build",
+    "start": "next start --port 3737",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@ziggy/models": "workspace:*",
+    "@ziggy/orchestrator": "workspace:*",
+    "@ziggy/memory": "workspace:*",
+    "@ziggy/policy": "workspace:*",
+    "@ziggy/shared": "workspace:*",
+    "@ziggy/tools": "workspace:*",
+    "next": "^14.2.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.4.5"
+  }
+}

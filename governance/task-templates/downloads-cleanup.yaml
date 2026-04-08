@@ -1,0 +1,9 @@
+id: downloads_cleanup
+title: Tidy Downloads
+goal: Review my Downloads folder, propose a careful organization plan, and wait for approval before moving files.
+context: file_cleanup
+risk_level: high
+sensitivity_level: basic
+allowed_capabilities:
+  - files.propose_organize
+  - files.apply_organize

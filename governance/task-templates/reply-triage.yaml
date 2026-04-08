@@ -1,0 +1,9 @@
+id: reply_triage
+title: Draft responses
+goal: Review unread work emails and prepare drafts for the messages that need a response.
+context: work_email
+risk_level: medium
+sensitivity_level: basic
+allowed_capabilities:
+  - email.read
+  - email.draft

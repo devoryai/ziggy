@@ -1,0 +1,8 @@
+id: daily_briefing
+title: Prepare my day
+goal: Review today's meetings and summarize the most important context I should know before I start.
+context: calendar_prep
+risk_level: low
+sensitivity_level: basic
+allowed_capabilities:
+  - calendar.read

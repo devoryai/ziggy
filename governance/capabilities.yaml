@@ -1,0 +1,43 @@
+capabilities:
+  - id: email.read
+    display_name: Read inbox summaries
+    risk_level: low
+    default_worker_role: planner
+    allowed_worker_types:
+      - local
+      - external
+    notes: Summaries are inspectable and should avoid side effects.
+
+  - id: email.draft
+    display_name: Draft email replies
+    risk_level: medium
+    default_worker_role: writer
+    allowed_worker_types:
+      - local
+      - external
+    notes: Drafting is useful, but sending stays outside the runtime.
+
+  - id: calendar.read
+    display_name: Review calendar context
+    risk_level: low
+    default_worker_role: planner
+    allowed_worker_types:
+      - local
+      - external
+    notes: Calendar prep should remain read-only and auditable.
+
+  - id: files.propose_organize
+    display_name: Propose file organization
+    risk_level: medium
+    default_worker_role: planner
+    allowed_worker_types:
+      - local
+    notes: Proposals should stay inside the approved root and remain reversible.
+
+  - id: files.apply_organize
+    display_name: Apply approved file moves
+    risk_level: high
+    default_worker_role: builder
+    allowed_worker_types:
+      - local
+    notes: Local file changes always require human approval and full logging.

@@ -1,0 +1,17 @@
+node_modules/
+.next/
+dist/
+.turbo/
+coverage/
+
+.DS_Store
+
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/runs/
+
+apps/web/.next/
+packages/*/dist/
+
+.codex

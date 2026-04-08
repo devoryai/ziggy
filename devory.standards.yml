@@ -1,0 +1,38 @@
+# devory.standards.yml
+#
+# Define what "good" means for your codebase.
+# The Devory factory uses these standards as guardrails on every run.
+#
+# Run `devory improve --type compliance` to check your codebase against these rules.
+# Custom rules require a Pro or Teams license — see https://devory.ai/pricing
+
+version: "1"
+
+stack:
+  language: typescript        # e.g. typescript, javascript, python, go
+  # framework: nextjs         # e.g. nextjs, express, fastapi, rails
+  # database: postgres        # e.g. postgres, mysql, sqlite, mongodb
+
+doctrine:
+  # extends: "@devory/defaults/typescript-nextjs"  # Uncomment to inherit a Devory baseline
+
+  testing:
+    require_unit: true
+    require_integration: true
+    coverage_threshold: 80
+    avoid_mocking:
+      - database
+      - filesystem
+
+  architecture:
+    max_file_lines: 300
+    no_circular_deps: true
+    # pattern: feature-slices
+
+  code_style:
+    no_any: true
+    prefer_explicit_over_clever: true
+
+  # custom_rules:             # Pro/Teams only
+  #   - "All API routes must validate input at the boundary"
+  #   - "No direct imports from workers layer in app layer"

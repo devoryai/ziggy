@@ -1,0 +1,35 @@
+capabilities:
+  - id: email.read
+    description: Read email summaries from approved accounts
+    side_effect: false
+    approval_required: false
+    accounts:
+      - work
+
+  - id: email.draft
+    description: Draft replies in approved accounts (does not send)
+    side_effect: true
+    approval_required: true
+    accounts:
+      - work
+
+  - id: calendar.read
+    description: Read events from approved calendars
+    side_effect: false
+    approval_required: false
+    calendars:
+      - work
+
+  - id: files.propose_organize
+    description: Propose file rename/move actions within approved directories
+    side_effect: false
+    approval_required: false
+    paths:
+      - "~/Downloads"
+
+  - id: files.apply_organize
+    description: Apply approved file rename/move actions within approved directories
+    side_effect: true
+    approval_required: true
+    paths:
+      - "~/Downloads"

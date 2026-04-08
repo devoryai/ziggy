@@ -1,0 +1,29 @@
+communication:
+  work_email:
+    tone: direct_warm
+    avoid_phrases:
+      - "we've got"
+      - "circle back"
+      - "touch base"
+      - "reach out"
+      - "per my last email"
+    prefers_short_openings: true
+    max_reply_length: medium
+
+  casual:
+    tone: conversational
+    prefers_short_openings: false
+
+approval:
+  email_draft: always_review
+  file_changes: always_review
+  calendar_events: auto
+
+organization:
+  downloads_strategy: project_then_type
+  rename_convention: lowercase_snake_case
+  group_by_date: false
+
+planning:
+  max_steps: 8
+  require_reason_per_step: true
