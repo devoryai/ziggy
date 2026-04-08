@@ -59,8 +59,14 @@ type FocusSession = {
 };
 
 const FOCUS_SESSION_STORAGE_KEY = "ziggy_focus_session";
+const INSTALL_PROMPT_DISMISSED_KEY = "ziggy_install_prompt_dismissed";
 const DEFAULT_FOCUS_DURATION_MINUTES = 25;
 const FOCUS_EXTENSION_MINUTES = 15;
+
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+};
 
 export default function HomePage() {
   const [title, setTitle] = useState("");
@@ -77,6 +83,8 @@ export default function HomePage() {
   const [focusSession, setFocusSession] = useState<FocusSession | null>(null);
   const [completedFocusTaskName, setCompletedFocusTaskName] = useState<string | null>(null);
   const [remainingMs, setRemainingMs] = useState(0);
+  const [installPromptEvent, setInstallPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
+  const [installPromptVisible, setInstallPromptVisible] = useState(false);
   const createTaskRef = useRef<HTMLDivElement | null>(null);
   const taskListRef = useRef<HTMLDivElement | null>(null);
 
@@ -154,6 +162,34 @@ export default function HomePage() {
     const interval = window.setInterval(tick, 1000);
     return () => window.clearInterval(interval);
   }, [focusSession]);
+
+  useEffect(() => {
+    const iosNavigator = window.navigator as Navigator & { standalone?: boolean };
+    const isStandalone =
+      window.matchMedia("(display-mode: standalone)").matches || iosNavigator.standalone === true;
+    const dismissed = window.localStorage.getItem(INSTALL_PROMPT_DISMISSED_KEY) === "true";
+    if (isStandalone || dismissed) return;
+
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPromptEvent(event as BeforeInstallPromptEvent);
+      setInstallPromptVisible(true);
+    };
+
+    const handleInstalled = () => {
+      setInstallPromptEvent(null);
+      setInstallPromptVisible(false);
+      window.localStorage.setItem(INSTALL_PROMPT_DISMISSED_KEY, "true");
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleInstalled);
+    };
+  }, []);
 
   const taskCards = useMemo(() => buildTaskCards(runs), [runs]);
   const runIsActive =
@@ -423,6 +459,27 @@ export default function HomePage() {
     handleViewTasks();
   }
 
+  async function handleInstallClick() {
+    if (!installPromptEvent) return;
+
+    await installPromptEvent.prompt();
+    const choice = await installPromptEvent.userChoice;
+    setInstallPromptEvent(null);
+
+    if (choice.outcome === "accepted") {
+      setInstallPromptVisible(false);
+      return;
+    }
+
+    dismissInstallPrompt();
+  }
+
+  function dismissInstallPrompt() {
+    setInstallPromptVisible(false);
+    setInstallPromptEvent(null);
+    window.localStorage.setItem(INSTALL_PROMPT_DISMISSED_KEY, "true");
+  }
+
   return (
     <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
       <header className="homepage-section">
@@ -448,6 +505,27 @@ export default function HomePage() {
           onViewTasks={handleViewTasks}
         />
       </section>
+
+      {installPromptVisible && installPromptEvent ? (
+        <section className="homepage-section">
+          <div className="install-prompt-card">
+            <div>
+              <div className="install-prompt-title">Install Ziggy</div>
+              <div className="install-prompt-copy">
+                Open Ziggy in its own window for a calmer, app-like experience.
+              </div>
+            </div>
+            <div className="install-prompt-actions">
+              <button type="button" className="button-primary" onClick={() => void handleInstallClick()}>
+                Install Ziggy
+              </button>
+              <button type="button" className="button-secondary" onClick={dismissInstallPrompt}>
+                Not now
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {focusSession ? (
         <section className="homepage-section">

@@ -1,9 +1,28 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { PwaBoot } from "@/components/pwa-boot";
 
 export const metadata: Metadata = {
-  title: "Ziggy — Governed Agent Runtime",
-  description: "Risk-first, local-first agent runtime with human review and full auditability.",
+  applicationName: "Ziggy",
+  title: "Ziggy",
+  description: "Run your day with clear guardrails.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Ziggy",
+    statusBarStyle: "default",
+  },
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.svg", type: "image/svg+xml", sizes: "192x192" },
+      { url: "/icons/icon-512.svg", type: "image/svg+xml", sizes: "512x512" },
+    ],
+    apple: [{ url: "/icons/apple-touch-icon.svg", type: "image/svg+xml", sizes: "180x180" }],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#6f8594",
 };
 
 export default function RootLayout({
@@ -14,6 +33,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
+        <PwaBoot />
         <div style={{ display: "flex", minHeight: "100vh" }}>
           <nav style={{
             width: "240px",
