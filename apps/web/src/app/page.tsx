@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CapabilityId, ContextId, RunRecord } from "@ziggy/shared";
+import { FocusBlock } from "@/components/focus-block";
 import { MorningBrief } from "@/components/morning-brief";
 import { QuickActions } from "@/components/quick-actions";
 import { RecentActivity } from "@/components/recent-activity";
@@ -50,6 +51,17 @@ type TaskCardData = TaskPreset & {
   lastRun: RunRecord;
 };
 
+type FocusSession = {
+  taskName: string;
+  startTime: number;
+  durationMinutes: number;
+  isActive: boolean;
+};
+
+const FOCUS_SESSION_STORAGE_KEY = "ziggy_focus_session";
+const DEFAULT_FOCUS_DURATION_MINUTES = 25;
+const FOCUS_EXTENSION_MINUTES = 15;
+
 export default function HomePage() {
   const [title, setTitle] = useState("");
   const [goal, setGoal] = useState("");
@@ -62,8 +74,9 @@ export default function HomePage() {
   const [runs, setRuns] = useState<RunRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
-  const [isFocusActive, setIsFocusActive] = useState(false);
-  const [activeTaskName, setActiveTaskName] = useState("");
+  const [focusSession, setFocusSession] = useState<FocusSession | null>(null);
+  const [completedFocusTaskName, setCompletedFocusTaskName] = useState<string | null>(null);
+  const [remainingMs, setRemainingMs] = useState(0);
   const createTaskRef = useRef<HTMLDivElement | null>(null);
   const taskListRef = useRef<HTMLDivElement | null>(null);
 
@@ -79,6 +92,22 @@ export default function HomePage() {
 
   useEffect(() => {
     void loadRuns();
+  }, []);
+
+  useEffect(() => {
+    const restoredSession = loadStoredFocusSession();
+    if (!restoredSession?.isActive) return;
+
+    const nextRemainingMs = getRemainingMs(restoredSession, Date.now());
+    if (nextRemainingMs <= 0) {
+      clearStoredFocusSession();
+      setCompletedFocusTaskName(restoredSession.taskName);
+      setRemainingMs(0);
+      return;
+    }
+
+    setFocusSession(restoredSession);
+    setRemainingMs(nextRemainingMs);
   }, []);
 
   useEffect(() => {
@@ -104,6 +133,27 @@ export default function HomePage() {
       setLaunchStatus("Ziggy is working…");
     }
   }, [activeRunDetail]);
+
+  useEffect(() => {
+    if (!focusSession?.isActive) return;
+
+    const tick = () => {
+      const nextRemainingMs = getRemainingMs(focusSession, Date.now());
+      if (nextRemainingMs <= 0) {
+        clearStoredFocusSession();
+        setFocusSession(null);
+        setCompletedFocusTaskName(focusSession.taskName);
+        setRemainingMs(0);
+        return;
+      }
+
+      setRemainingMs(nextRemainingMs);
+    };
+
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [focusSession]);
 
   const taskCards = useMemo(() => buildTaskCards(runs), [runs]);
   const runIsActive =
@@ -170,8 +220,8 @@ export default function HomePage() {
       label: "Start Focus Block",
       description: "Spin up a guided focus run around the next important task.",
       icon: "◔",
-      onClick: () => void launchTask(makeFocusTask(taskCards[0])),
-      disabled: runIsActive,
+      onClick: () => handleStartFocus(taskCards[0]),
+      disabled: false,
     },
     {
       label: "Review Inbox",
@@ -201,6 +251,11 @@ export default function HomePage() {
     href: `/runs/${run.id}`,
     text: `${formatActivityVerb(run)} (${formatRelativeTime(run.updated_at)})`,
   }));
+
+  const focusTimerLabel = focusSession ? formatDuration(remainingMs) : "25:00";
+  const focusProgressPercent = focusSession
+    ? getElapsedPercent(focusSession, remainingMs)
+    : 0;
 
   function toggleCap(id: CapabilityId) {
     setCapabilities((prev) =>
@@ -304,8 +359,7 @@ export default function HomePage() {
   function handleFocus(task: AttentionTask) {
     const match = findTask(task);
     if (!match) return;
-    setIsFocusActive(true);
-    setActiveTaskName(match.title);
+    startFocusSession(match.title);
     if (runIsActive) return;
     void launchTask(makeFocusTask(match));
   }
@@ -315,24 +369,58 @@ export default function HomePage() {
   }
 
   function handleEndEarly() {
-    setIsFocusActive(false);
-    setActiveTaskName("");
-    setActiveRunId(null);
-    setActiveRunDetail(null);
-    setLaunchStatus(null);
+    endFocusSession();
   }
 
   function handleStartFocus(task?: TaskPreset) {
     const nextTaskName = task?.title ?? suggestedTask;
-    setIsFocusActive(true);
-    setActiveTaskName(nextTaskName);
+    startFocusSession(nextTaskName);
     if (runIsActive) return;
     void launchTask(makeFocusTask(task));
   }
 
   function handleSwitchFocusTask() {
+    endFocusSession();
     setCreateTaskOpen(true);
     createTaskRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function startFocusSession(taskName: string) {
+    const session: FocusSession = {
+      taskName,
+      startTime: Date.now(),
+      durationMinutes: DEFAULT_FOCUS_DURATION_MINUTES,
+      isActive: true,
+    };
+
+    setFocusSession(session);
+    setCompletedFocusTaskName(null);
+    setRemainingMs(session.durationMinutes * 60 * 1000);
+    saveStoredFocusSession(session);
+  }
+
+  function endFocusSession() {
+    clearStoredFocusSession();
+    setFocusSession(null);
+    setRemainingMs(0);
+  }
+
+  function handleExtendFocus() {
+    if (!focusSession?.isActive) return;
+
+    const nextSession = {
+      ...focusSession,
+      durationMinutes: focusSession.durationMinutes + FOCUS_EXTENSION_MINUTES,
+    };
+
+    setFocusSession(nextSession);
+    saveStoredFocusSession(nextSession);
+    setRemainingMs(getRemainingMs(nextSession, Date.now()));
+  }
+
+  function handleReturnToTasks() {
+    setCompletedFocusTaskName(null);
+    handleViewTasks();
   }
 
   return (
@@ -361,28 +449,29 @@ export default function HomePage() {
         />
       </section>
 
-      {isFocusActive ? (
+      {focusSession ? (
         <section className="homepage-section">
-          <div className="focus-block focus-banner">
-            <div className="focus-block-top">
-              <div>
-                <div className="focus-block-title">Focus: {activeTaskName || suggestedTask}</div>
-                <div className="focus-block-copy">I&apos;ll keep distractions down while you work.</div>
-              </div>
-            </div>
-
-            <div className="focus-block-actions">
-              <button type="button" className="button-secondary" onClick={handleEndEarly}>
-                End Early
-              </button>
-              <button type="button" className="button-secondary">
-                Extend 15 min
-              </button>
-              <button type="button" className="button-primary" onClick={handleSwitchFocusTask}>
-                Switch Task
-              </button>
-            </div>
-          </div>
+          <FocusBlock
+            taskName={focusSession.taskName}
+            timerLabel={focusTimerLabel}
+            stateLabel="Active"
+            progressPercent={focusProgressPercent}
+            onEndEarly={handleEndEarly}
+            onExtend={handleExtendFocus}
+            onSwitchTask={handleSwitchFocusTask}
+          />
+        </section>
+      ) : completedFocusTaskName ? (
+        <section className="homepage-section">
+          <FocusBlock
+            taskName={completedFocusTaskName}
+            isComplete
+            onEndEarly={handleEndEarly}
+            onExtend={handleExtendFocus}
+            onSwitchTask={handleSwitchFocusTask}
+            onStartAnother={() => handleStartFocus()}
+            onReturnToTasks={handleReturnToTasks}
+          />
         </section>
       ) : null}
 
@@ -523,6 +612,59 @@ export default function HomePage() {
       </section>
     </div>
   );
+}
+
+function loadStoredFocusSession(): FocusSession | null {
+  try {
+    const raw = window.localStorage.getItem(FOCUS_SESSION_STORAGE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<FocusSession>;
+    if (
+      typeof parsed.taskName !== "string" ||
+      typeof parsed.startTime !== "number" ||
+      typeof parsed.durationMinutes !== "number" ||
+      typeof parsed.isActive !== "boolean"
+    ) {
+      return null;
+    }
+
+    return {
+      taskName: parsed.taskName,
+      startTime: parsed.startTime,
+      durationMinutes: parsed.durationMinutes,
+      isActive: parsed.isActive,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveStoredFocusSession(session: FocusSession) {
+  window.localStorage.setItem(FOCUS_SESSION_STORAGE_KEY, JSON.stringify(session));
+}
+
+function clearStoredFocusSession() {
+  window.localStorage.removeItem(FOCUS_SESSION_STORAGE_KEY);
+}
+
+function getRemainingMs(session: FocusSession, now: number): number {
+  const endTime = session.startTime + session.durationMinutes * 60 * 1000;
+  return Math.max(0, endTime - now);
+}
+
+function formatDuration(remainingMs: number): string {
+  const totalSeconds = Math.ceil(remainingMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function getElapsedPercent(session: FocusSession, remainingMs: number): number {
+  const totalMs = session.durationMinutes * 60 * 1000;
+  if (totalMs <= 0) return 100;
+  return ((totalMs - remainingMs) / totalMs) * 100;
 }
 
 function buildTaskCards(runs: RunRecord[]): TaskCardData[] {

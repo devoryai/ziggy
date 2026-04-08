@@ -346,6 +346,22 @@ pre, code {
   font-weight: 600;
 }
 
+.focus-progress {
+  width: 100%;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: rgba(161, 98, 7, 0.14);
+  overflow: hidden;
+  margin-bottom: 0.9rem;
+}
+
+.focus-progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #d97706, #f59e0b);
+  transition: width 1s linear;
+}
+
 .task-list-grid {
   display: grid;
   gap: 1rem;
