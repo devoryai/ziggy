@@ -7,7 +7,8 @@ This file defines the context every AI worker loads before performing work in th
 ## Doctrine
 
 Doctrine files define the engineering rules every run must follow.
-The worker loads files listed below automatically — edit this list as your project grows.
+The worker should load every doctrine file in `doctrine/` by default, except `doctrine/product-philosophy.md`.
+The explicit list below is the current default rollout set.
 
 Always load these:
 
@@ -18,7 +19,7 @@ Always load these:
 
 Load when relevant:
 
-(add conditional doctrine files here)
+- doctrine/product-philosophy.md
 
 ## Skills
 

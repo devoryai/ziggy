@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the workflow rules used by the AI development factory and Saltware engineering process.
+This document defines the workflow rules used by this engineering workflow.
 
 These rules ensure that work is:
 
